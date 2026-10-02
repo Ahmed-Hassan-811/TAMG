@@ -1,0 +1,35 @@
+# Syncs this GitHub repo to the Hugging Face Space on every push to main.
+# ---------------------------------------------------------------------------
+# One-time setup before this works:
+#   1. Create the HF Space (SDK: Streamlit), note its URL.
+#   2. Create an HF access token with WRITE scope (HF -> Settings -> Access Tokens).
+#   3. In GitHub: repo -> Settings -> Secrets and variables -> Actions ->
+#      add a secret named HF_TOKEN with that token.
+#   4. Replace HF_USERNAME and HF_SPACE_NAME below with your own.
+# The Groq API key is NOT set here — it lives in the HF Space's own secrets.
+
+name: Sync to Hugging Face Space
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # lets you trigger a sync manually from the Actions tab
+
+jobs:
+  sync-to-hub:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # full history so the push to HF is clean
+
+      - name: Push to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_USERNAME: your-hf-username        # <-- replace
+          HF_SPACE_NAME: pocketforge           # <-- replace with your Space name
+        run: |
+          git push --force \
+            "https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/${HF_USERNAME}/${HF_SPACE_NAME}" \
+            main

@@ -1,0 +1,21 @@
+# Secrets — NEVER commit these (Groq key lives in HF Space secrets instead)
+.streamlit/secrets.toml
+.env
+
+# Runtime outputs (regenerated each run; only the small cached demo in
+# data/precomputed/ is committed, in P5)
+results/
+*.pdbqt
+*.sdf.tmp
+
+# Large model weights — these load from HF Hub at startup, never from git
+*.ckpt
+*.pt
+*.pth
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/

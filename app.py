@@ -1,70 +1,95 @@
 import os
 import streamlit as st
-import pandas as pd
-import streamlit.components.v1 as components
-import py3Dmol
+from litellm import completion, AuthenticationError, NotFoundError
 
-# 1. Load secrets into os.environ FIRST to authenticate LiteLLM/CrewAI correctly
-if "GROQ_API_KEY" in st.secrets:
-    os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
+# Page Configuration
+st.set_page_config(
+    page_title="AI Assistant",
+    page_icon="🤖",
+    layout="centered"
+)
 
-if "OPENAI_API_KEY" in st.secrets:
-    os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+st.title("🤖 Streamlit AI Assistant")
+st.markdown("Powered by LiteLLM")
 
-# 2. Now import local modules that rely on LLM clients
-from agents.generator import generate_smiles
-from tools.chem_tools import get_chem_metrics, filter_substructure
-from tools.docking_tools import dock_molecule
-import config
+# --- SECRETS & ENVIRONMENT CONFIGURATION ---
+# Safely load API keys from Streamlit secrets into environment variables
+try:
+    if "OPENAI_API_KEY" in st.secrets:
+        os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+    if "GROQ_API_KEY" in st.secrets:
+        os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
+except Exception:
+    # Allows local testing if secrets.toml isn't set up yet
+    pass
 
-st.set_page_config(page_title="TAMG | Molecule Generator", layout="wide")
-
-st.title("TAMG — Target-Aware Molecule Generator 🧬")
-st.markdown("LLM-proposed, docking-validated generation for SARS-CoV-2 Mpro.")
-
+# --- SIDEBAR CONFIGURATION ---
 with st.sidebar:
-    st.header("Control Panel")
-    target = st.text_input("Target Protein", value="SARS-CoV-2 Mpro (6LU7)")
-    forbid = st.text_input("Forbid Substructure (SMARTS)", value="[N+](=[O-])[O-]")
-    run_btn = st.button("Propose & Score", type="primary")
+    st.header("Configuration")
+    
+    # Model selection (using active, reliable model slugs)
+    provider_option = st.selectbox(
+        "Select Model",
+        [
+            "groq/llama-3.1-8b-instant",
+            "openai/gpt-4o-mini",
+            "groq/llama-3.3-70b-versatile"
+        ]
+    )
+    
+    temperature = st.slider("Temperature", 0.0, 1.0, 0.7)
+    
+    st.markdown("---")
+    st.markdown("### API Key Status")
+    st.text(f"OpenAI Key Set: {'Yes' if os.getenv('OPENAI_API_KEY') else 'No'}")
+    st.text(f"Groq Key Set: {'Yes' if os.getenv('GROQ_API_KEY') else 'No'}")
 
-if run_btn:
-    with st.spinner("Agent: LLM proposing SMILES via Groq..."):
+# --- CHAT INTERFACE ---
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Display chat history
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# User input
+if prompt := st.chat_input("How can I help you today?"):
+    # Append user message
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # Generate assistant response
+    with st.chat_message("assistant"):
+        message_placeholder = st.empty()
+        message_placeholder.markdown("Thinking...")
+        
         try:
-            smiles = generate_smiles(target, forbid)
+            # Format messages for LiteLLM
+            formatted_messages = [
+                {"role": m["role"], "content": m["content"]} 
+                for m in st.session_state.messages
+            ]
+            
+            # Execute LiteLLM completion call
+            response = completion(
+                model=provider_option,
+                messages=formatted_messages,
+                temperature=temperature
+            )
+            
+            assistant_response = response.choices[0].message.content
+            message_placeholder.markdown(assistant_response)
+            
+            # Save to history
+            st.session_state.messages.append({"role": "assistant", "content": assistant_response})
+            
+        except AuthenticationError as e:
+            error_msg = "Authentication Error: Please check your API key in Streamlit Secrets (`Settings > Secrets`)."
+            message_placeholder.error(error_msg)
+        except NotFoundError as e:
+            error_msg = f"Model Error: The model `{provider_option}` was not found or is unavailable for your account tier."
+            message_placeholder.error(error_msg)
         except Exception as e:
-            st.error(f"Generation failed: {e}")
-            smiles = []
-            
-    if smiles:
-        with st.spinner("Tools: Filtering & Docking Candidates..."):
-            valid_smiles = filter_substructure(smiles, forbid)
-            
-            results = []
-            # Evaluate top candidates only to manage latency
-            for s in valid_smiles[:config.NUM_CANDIDATES]:
-                metrics = get_chem_metrics(s)
-                if metrics:
-                    score = dock_molecule(s, "data/targets/6LU7.pdbqt", config.DOCKING_BOX_CENTER, config.DOCKING_BOX_SIZE)
-                    results.append({
-                        "SMILES": s, 
-                        "QED": metrics['qed'], 
-                        "SA": metrics['sa'], 
-                        "Docking (kcal/mol)": score, 
-                        "PB-Valid": "Yes" if score < 0 else "Fail"
-                    })
-            
-            if results:
-                df = pd.DataFrame(results).sort_values("Docking (kcal/mol)")
-                st.dataframe(df, use_container_width=True)
-                
-                st.subheader("3D Pose Preview")
-                best_smiles = df.iloc[0]["SMILES"]
-                st.info(f"Visualizing top candidate: {best_smiles}")
-                view = py3Dmol.view(width=800, height=400)
-                view.addModel(best_smiles, "smi")
-                view.setStyle({'stick': {}})
-                view.zoomTo()
-                components.html(view._make_html(), height=400, width=800)
-            else:
-                st.warning("No valid molecules survived the docking and filtering gates.")
+            message_placeholder.error(f"An unexpected error occurred: {str(e)}")

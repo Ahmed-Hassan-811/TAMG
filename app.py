@@ -2,13 +2,12 @@ import os
 import re
 import streamlit as st
 import pandas as pd
-from litellm import completion, AuthenticationError, NotFoundError
+from litellm import completion
 
 from rdkit import Chem
 from rdkit.Chem import QED, Descriptors, Lipinski, Crippen
 
 # --- Real SA (synthetic accessibility) score from RDKit's contrib module ---
-# Ships with rdkit; the import is awkward because it lives in the contrib path.
 _SA_OK = True
 try:
     import sys
@@ -17,6 +16,24 @@ try:
     import sascorer  # noqa: E402
 except Exception:
     _SA_OK = False
+
+
+# ---------------------------------------------------------------------------
+# Error -> plain-language fix (shown in the UI when something breaks)
+# ---------------------------------------------------------------------------
+def explain_error(e):
+    s = str(e).lower()
+    if "no credits" in s or "openaiexception" in s or ("openai" in s and "credit" in s):
+        return ("⚠️ Routed to OpenAI (no credits). In the sidebar **Select Model**, pick a model that "
+                "starts with `groq/` — Groq is free.")
+    if "ratelimit" in s or "rate limit" in s or "429" in s or "too many requests" in s:
+        return ("⚠️ Groq free-tier rate limit hit. Wait ~30 seconds and retry, or lower "
+                "**Candidates to propose** in the sidebar.")
+    if "api key" in s or "authentication" in s or "401" in s or "invalid" in s and "key" in s:
+        return "⚠️ API key problem — check `GROQ_API_KEY` in Streamlit Secrets (Manage app → Settings → Secrets)."
+    if "not found" in s or "does not exist" in s or "decommission" in s:
+        return "⚠️ That model is unavailable. Pick a `groq/` model from the dropdown."
+    return f"⚠️ Unexpected error: {e}\n\nSee **🛠️ If something breaks** in the sidebar."
 
 
 # ---------------------------------------------------------------------------
@@ -63,8 +80,7 @@ def compute_metrics(mol):
     logp = round(Crippen.MolLogP(mol), 2)
     hbd = Lipinski.NumHDonors(mol)
     hba = Lipinski.NumHAcceptors(mol)
-    # Lipinski Rule of 5: a drug-like molecule has at most one violation.
-    violations = sum([mw > 500, logp > 5, hbd > 5, hba > 10])
+    violations = sum([mw > 500, logp > 5, hbd > 5, hba > 10])   # Lipinski Rule of 5
     sa = round(sascorer.calculateScore(mol), 2) if _SA_OK else None
     return {
         "QED": round(QED.qed(mol), 3),
@@ -84,7 +100,6 @@ st.set_page_config(page_title="Target-Aware Molecule Generator (TAMG)", page_ico
 st.title("🧬 Target-Aware Molecule Generator (TAMG)")
 st.markdown("LLM-proposed, RDKit-validated molecular candidates with substructure constraints.")
 
-# LiteLLM reads keys from environment variables; copy them out of st.secrets.
 try:
     if "GROQ_API_KEY" in st.secrets:
         os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
@@ -108,9 +123,8 @@ with st.sidebar:
 
     st.markdown("---")
     st.header("⚙️ Model Configuration")
-    # LiteLLM picks the provider from the text BEFORE the first '/'.
-    # Groq's model id is 'openai/gpt-oss-120b', so the 'groq/' prefix is required
-    # to route to Groq (not OpenAI).
+    # LiteLLM picks the provider from the text BEFORE the first '/'. Groq's model
+    # id is 'openai/gpt-oss-120b', so the 'groq/' prefix is required to reach Groq.
     provider_option = st.selectbox(
         "Select Model",
         ("groq/openai/gpt-oss-120b", "groq/openai/gpt-oss-20b"),
@@ -123,7 +137,16 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### API Key Status")
     st.text(f"Groq Key Set: {'Yes' if os.getenv('GROQ_API_KEY') else 'No'}")
-    st.caption("SA score: " + ("available" if _SA_OK else "unavailable"))
+    st.caption("SA score: " + ("available" if _SA_OK else "unavailable (SA column blank; not a blocker)"))
+
+    # ---- In-UI troubleshooting flags ----
+    with st.expander("🛠️ If something breaks"):
+        st.markdown(
+            "- **'no credits' / OpenAI error** → pick a model starting with `groq/` (free).\n"
+            "- **RateLimitError (Groq)** → wait ~30s and retry, or lower *Candidates to propose*.\n"
+            "- **'SA score: unavailable'** → the SA column is blank; everything else still works.\n"
+            "- **'No valid molecules came back'** → raise *Temperature* and click again."
+        )
 
 
 def call_llm(messages):
@@ -153,7 +176,6 @@ if st.button("Generate & validate", type="primary"):
 
         proposed = extract_smiles(text)
 
-        # Validate + dedupe (canonical) + score.
         seen, rows = set(), []
         for smi in proposed:
             mol = Chem.MolFromSmiles(smi)
@@ -168,12 +190,11 @@ if st.button("Generate & validate", type="primary"):
             rows.append(row)
 
         if not rows:
-            st.error("No valid molecules came back. Try again or raise the temperature.")
+            st.error("No valid molecules came back. Raise the Temperature slider and try again.")
         else:
             df = pd.DataFrame(rows)
             kept = df[df["Forbidden"] == ""].copy().sort_values("QED", ascending=False)
 
-            # Funnel — the honest story of what survived each gate.
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Proposed (valid)", len(proposed))
             c2.metric("Unique", len(df))
@@ -188,24 +209,16 @@ if st.button("Generate & validate", type="primary"):
             if len(dropped):
                 st.caption(f"{len(dropped)} candidate(s) dropped for containing a forbidden substructure.")
 
-            st.download_button(
-                "Download CSV",
-                kept.to_csv(index=False).encode(),
-                file_name="tamg_candidates.csv",
-                mime="text/csv",
-            )
-            st.info("Scores are real RDKit computations. Binding/docking validation is not wired in yet "
-                    "(it needs the receptor-prep step) — present this as LLM-proposed, RDKit-validated.")
+            st.download_button("Download CSV", kept.to_csv(index=False).encode(),
+                               file_name="tamg_candidates.csv", mime="text/csv")
+            st.info("Scores are real RDKit computations. Docking/binding validation is not wired in — "
+                    "present this as LLM-proposed, RDKit-validated.")
 
-    except AuthenticationError:
-        st.error("Authentication Error: check GROQ_API_KEY in Streamlit Secrets.")
-    except NotFoundError:
-        st.error(f"Model Error: `{provider_option}` is unavailable for your tier.")
     except Exception as e:
-        st.error(f"An unexpected error occurred: {e}")
+        st.error(explain_error(e))
 
 # ---------------------------------------------------------------------------
-# Free-form chat (optional — ask it to explain a candidate, properties, etc.)
+# Free-form chat
 # ---------------------------------------------------------------------------
 st.markdown("---")
 st.subheader("💬 Ask TAMG")
@@ -238,4 +251,4 @@ if prompt := st.chat_input("Ask about a candidate, a property, or request specif
             ph.markdown(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
         except Exception as e:
-            ph.error(f"An unexpected error occurred: {e}")
+            ph.error(explain_error(e))

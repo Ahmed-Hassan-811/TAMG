@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
-from stmol import showmol
-import py3Dmol
+import streamlit.components.v1 as componentsimport py3Dmol
 from agents.generator import generate_smiles
 from tools.chem_tools import get_chem_metrics, filter_substructure
 from tools.docking_tools import dock_molecule
@@ -55,6 +54,6 @@ if run_btn:
                 view.addModel(best_smiles, "smi")
                 view.setStyle({'stick': {}})
                 view.zoomTo()
-                showmol(view, height=400, width=800)
+                components.html(view._make_html(), height=400, width=800)
             else:
                 st.warning("No valid molecules survived the docking and filtering gates.")

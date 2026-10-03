@@ -12,6 +12,15 @@ import os
 
 # Ensure your API key and base URL (if using a custom endpoint) are set
 # os.environ["OPENAI_API_KEY"] = "your-api-key"
+import os
+import streamlit as st
+
+# Load secrets into os.environ for LiteLLM / CrewAI
+if "GROQ_API_KEY" in st.secrets:
+    os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
+
+if "OPENAI_API_KEY" in st.secrets:
+    os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
 # os.environ["OPENAI_API_BASE"] = "your-custom-endpoint-url" # Uncomment if not using standard OpenAI servers
 
 response = completion(

@@ -23,12 +23,16 @@ if "OPENAI_API_KEY" in st.secrets:
     os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
 # os.environ["OPENAI_API_BASE"] = "your-custom-endpoint-url" # Uncomment if not using standard OpenAI servers
 
+from litellm import completion
+
+# For Groq models:
 response = completion(
-    model="openai/gpt-oss-120b",
-    messages=[{"role": "user", "content": "Your prompt here"}]
+    model="groq/llama-3.3-70b-versatile", # Ensure "groq/" prefix is included
+    messages=[{"role": "user", "content": "Hello!"}]
 )
 
-print(response.choices[0].message.content)
+# Pass API key directly if not set in os.environ:
+# response = completion(model="groq/llama-3.3-70b-versatile", api_key=st.secrets["GROQ_API_KEY"], messages=...)
 
 st.set_page_config(page_title="TAMG | Molecule Generator", layout="wide")
 

@@ -13,6 +13,8 @@ st.title("🧬 Target-Aware Molecule Generator (TAMG)")
 st.markdown("Generate and optimize target-specific molecular candidates with substructure constraints.")
 
 # --- SECRETS & ENVIRONMENT CONFIGURATION ---
+# LiteLLM reads keys from environment variables, so copy them out of st.secrets.
+# Only the Groq key is needed now; the OpenAI key is optional.
 try:
     if "OPENAI_API_KEY" in st.secrets:
         os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
@@ -24,14 +26,14 @@ except Exception:
 # --- SIDEBAR CONFIGURATION ---
 with st.sidebar:
     st.header("🧬 Target & Structure Settings")
-    
+
     # 1. Target Protein Selection
     target_protein = st.text_input(
         "Target Protein",
         value="SARS-CoV-2 Mpro (6LU7)",
         help="Specify the target protein name, accession code, or PDB ID."
     )
-    
+
     # 2. Forbid Substructures (SMARTS format)
     forbid_substructures = st.text_input(
         "Forbid Substructures (SMARTS)",
@@ -39,28 +41,28 @@ with st.sidebar:
         placeholder="e.g., [N;R0]=O or leave blank",
         help="Provide SMARTS notation for undesirable chemical fragments or toxicophores to exclude."
     )
-    
+
     st.markdown("---")
     st.header("⚙️ Model Configuration")
-    
-    # Model selector - Updated to avoid blocked Groq models
-    # Model selector - Updated for current Groq active models
+
+    # Model selector — LIVE Groq production models only.
+    # NOTE on routing: LiteLLM picks the provider from the text BEFORE the first "/".
+    # Groq's model id is "openai/gpt-oss-120b", so to reach Groq (not OpenAI) the
+    # full LiteLLM string must be prefixed with "groq/"  ->  "groq/openai/gpt-oss-120b".
     provider_option = st.selectbox(
         "Select Model",
         (
-            "openai/gpt-4o-mini",         # Reliable default (Recommended)
-            "groq/mixtral-8x7b-32768",    # Mixtral (Highly reliable on free tiers)
-            "groq/gemma2-9b-it",          # Google's Gemma 2 via Groq
+            "groq/openai/gpt-oss-120b",   # Groq, free tier, high reasoning (recommended)
+            "groq/openai/gpt-oss-20b",    # Groq, free tier, faster / lighter
         ),
         index=0,
         key="unique_tamg_model_selector"
     )
-    
+
     temperature = st.slider("Temperature (Creativity)", 0.0, 1.0, 0.4)
-    
+
     st.markdown("---")
     st.markdown("### API Key Status")
-    st.text(f"OpenAI Key Set: {'Yes' if os.getenv('OPENAI_API_KEY') else 'No'}")
     st.text(f"Groq Key Set: {'Yes' if os.getenv('GROQ_API_KEY') else 'No'}")
 
 # --- SYSTEM PROMPT CONSTRUCTION ---
@@ -97,34 +99,32 @@ if prompt := st.chat_input("Enter generation constraints, SMILES query, or reque
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         message_placeholder.markdown("Generating molecular candidates...")
-        
+
         try:
             # Build payload with active system instructions
             formatted_messages = [
                 {"role": "system", "content": system_instructions}
             ] + [
-                {"role": m["role"], "content": m["content"]} 
+                {"role": m["role"], "content": m["content"]}
                 for m in st.session_state.messages
             ]
-            
-            # Execute LiteLLM API call
+
+            # Execute LiteLLM API call (routed to Groq via the "groq/" prefix)
             response = completion(
                 model=provider_option,
                 messages=formatted_messages,
                 temperature=temperature
             )
-            
+
             assistant_response = response.choices[0].message.content
             message_placeholder.markdown(assistant_response)
-            
+
             # Save response to chat history
             st.session_state.messages.append({"role": "assistant", "content": assistant_response})
-            
+
         except AuthenticationError:
-            error_msg = "Authentication Error: Please check your API key settings in Streamlit Secrets."
-            message_placeholder.error(error_msg)
+            message_placeholder.error("Authentication Error: check GROQ_API_KEY in Streamlit Secrets.")
         except NotFoundError:
-            error_msg = f"Model Error: The model `{provider_option}` was not found or is unavailable for your API tier."
-            message_placeholder.error(error_msg)
+            message_placeholder.error(f"Model Error: `{provider_option}` was not found or is unavailable for your tier.")
         except Exception as e:
             message_placeholder.error(f"An unexpected error occurred: {str(e)}")

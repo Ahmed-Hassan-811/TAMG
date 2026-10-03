@@ -43,13 +43,13 @@ with st.sidebar:
     st.markdown("---")
     st.header("⚙️ Model Configuration")
     
-    # Model selector
+    # Model selector - Updated to avoid blocked Groq models
     provider_option = st.selectbox(
         "Select Model",
         (
-            "groq/llama-3.1-8b-instant",
-            "openai/gpt-4o-mini",
-            "groq/llama-3.3-70b-versatile"
+            "openai/gpt-4o-mini",         # Reliable default
+            "groq/llama3-8b-8192",        # Older Llama 3 (typically unblocked)
+            "groq/mixtral-8x7b-32768"     # Mixtral (typically unblocked)
         ),
         index=0,
         key="unique_tamg_model_selector"

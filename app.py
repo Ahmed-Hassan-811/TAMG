@@ -44,12 +44,13 @@ with st.sidebar:
     st.header("⚙️ Model Configuration")
     
     # Model selector - Updated to avoid blocked Groq models
+    # Model selector - Updated for current Groq active models
     provider_option = st.selectbox(
         "Select Model",
         (
-            "openai/gpt-4o-mini",         # Reliable default
-            "groq/llama3-8b-8192",        # Older Llama 3 (typically unblocked)
-            "groq/mixtral-8x7b-32768"     # Mixtral (typically unblocked)
+            "openai/gpt-4o-mini",         # Reliable default (Recommended)
+            "groq/mixtral-8x7b-32768",    # Mixtral (Highly reliable on free tiers)
+            "groq/gemma2-9b-it",          # Google's Gemma 2 via Groq
         ),
         index=0,
         key="unique_tamg_model_selector"

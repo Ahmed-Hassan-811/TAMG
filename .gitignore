@@ -1,0 +1,7 @@
+results/
+__pycache__/
+.streamlit/
+venv/
+*.zip
+*.pdbqt
+temp_*

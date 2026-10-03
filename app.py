@@ -1,38 +1,21 @@
+import os
 import streamlit as st
 import pandas as pd
 import streamlit.components.v1 as components
 import py3Dmol
-from agents.generator import generate_smiles
-from tools.chem_tools import get_chem_metrics, filter_substructure
-from tools.docking_tools import dock_molecule
-import config
 
-from litellm import completion
-import os
-
-# Ensure your API key and base URL (if using a custom endpoint) are set
-# os.environ["OPENAI_API_KEY"] = "your-api-key"
-import os
-import streamlit as st
-
-# Load secrets into os.environ for LiteLLM / CrewAI
+# 1. Load secrets into os.environ FIRST to authenticate LiteLLM/CrewAI correctly
 if "GROQ_API_KEY" in st.secrets:
     os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
 
 if "OPENAI_API_KEY" in st.secrets:
     os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
-# os.environ["OPENAI_API_BASE"] = "your-custom-endpoint-url" # Uncomment if not using standard OpenAI servers
 
-from litellm import completion
-
-# For Groq models:
-response = completion(
-    model="groq/openai/gpt-oss-120b", # Ensure "groq/" prefix is included
-    messages=[{"role": "user", "content": "Hello!"}]
-)
-
-# Pass API key directly if not set in os.environ:
-# response = completion(model="groq/llama-3.3-70b-versatile", api_key=st.secrets["GROQ_API_KEY"], messages=...)
+# 2. Now import local modules that rely on LLM clients
+from agents.generator import generate_smiles
+from tools.chem_tools import get_chem_metrics, filter_substructure
+from tools.docking_tools import dock_molecule
+import config
 
 st.set_page_config(page_title="TAMG | Molecule Generator", layout="wide")
 

@@ -1,7 +1,6 @@
 streamlit==1.38.0
 rdkit==2023.09.5
-vina==1.2.3
-posebusters==0.3.0
+posebusters
 crewai==0.65.1
 groq==0.11.0
 langchain-groq==0.1.9

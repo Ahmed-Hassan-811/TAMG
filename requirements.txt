@@ -7,4 +7,4 @@ langchain-groq==0.1.9
 py3Dmol==2.4.2
 meeko==0.5.0
 pandas==2.2.2
-setuptools
+setuptools==69.5.1

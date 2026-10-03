@@ -28,13 +28,16 @@ with st.sidebar:
     st.header("Configuration")
     
     # Model selection (using active, reliable model slugs)
+    # Model selection (using active, reliable model slugs)
     provider_option = st.selectbox(
         "Select Model",
-        [
+        (
             "groq/llama-3.1-8b-instant",
             "openai/gpt-4o-mini",
             "groq/llama-3.3-70b-versatile"
-        ]
+        ),
+        index=0,
+        key="unique_model_selector" # Forces a fresh session state
     )
     
     temperature = st.slider("Temperature", 0.0, 1.0, 0.7)

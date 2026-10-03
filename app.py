@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-import streamlit.components.v1 as componentsimport py3Dmol
+import streamlit.components.v1 as components
+import py3Dmol
 from agents.generator import generate_smiles
 from tools.chem_tools import get_chem_metrics, filter_substructure
 from tools.docking_tools import dock_molecule

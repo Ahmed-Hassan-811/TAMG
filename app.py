@@ -7,6 +7,20 @@ from tools.chem_tools import get_chem_metrics, filter_substructure
 from tools.docking_tools import dock_molecule
 import config
 
+from litellm import completion
+import os
+
+# Ensure your API key and base URL (if using a custom endpoint) are set
+# os.environ["OPENAI_API_KEY"] = "your-api-key"
+# os.environ["OPENAI_API_BASE"] = "your-custom-endpoint-url" # Uncomment if not using standard OpenAI servers
+
+response = completion(
+    model="openai/gpt-oss-120b",
+    messages=[{"role": "user", "content": "Your prompt here"}]
+)
+
+print(response.choices[0].message.content)
+
 st.set_page_config(page_title="TAMG | Molecule Generator", layout="wide")
 
 st.title("TAMG — Target-Aware Molecule Generator 🧬")

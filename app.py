@@ -27,7 +27,7 @@ from litellm import completion
 
 # For Groq models:
 response = completion(
-    model="groq/llama-3.3-70b-versatile", # Ensure "groq/" prefix is included
+    model="groq/openai/gpt-oss-120b", # Ensure "groq/" prefix is included
     messages=[{"role": "user", "content": "Hello!"}]
 )
 

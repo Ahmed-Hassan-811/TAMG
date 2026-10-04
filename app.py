@@ -160,6 +160,10 @@ def call_llm(messages):
 st.subheader("🧪 Generate & validate candidates")
 st.caption("The LLM proposes molecules; RDKit then checks every one — validity, QED, SA, Lipinski, and your forbidden substructures.")
 
+# The button only COMPUTES and stores results. Streamlit reruns the whole
+# script on every interaction (e.g. sending a chat message), so if we rendered
+# the table only inside this block it would vanish on the next rerun. Instead we
+# save to st.session_state and render it below on every run.
 if st.button("Generate & validate", type="primary"):
     pats = compile_forbidden(forbid_substructures)
     gen_prompt = (
@@ -190,46 +194,59 @@ if st.button("Generate & validate", type="primary"):
             rows.append(row)
 
         if not rows:
-            st.error("No valid molecules came back. Raise the Temperature slider and try again.")
+            st.session_state["results"] = {
+                "error": "No valid molecules came back. Raise the Temperature slider and try again."
+            }
         else:
             df = pd.DataFrame(rows)
             kept = df[df["Forbidden"] == ""].copy().sort_values("QED", ascending=False)
-
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Proposed (valid)", len(proposed))
-            c2.metric("Unique", len(df))
-            c3.metric("Passed forbid-filter", len(kept))
-            c4.metric("Drug-like (Ro5)", int(kept["Ro5"].sum()))
-
-            st.markdown("#### Ranked candidates (by QED)")
-            show_cols = ["SMILES", "QED", "SA", "MW", "LogP", "HBD", "HBA", "Ro5"]
-            st.dataframe(kept[show_cols], use_container_width=True, hide_index=True)
-
-            dropped = df[df["Forbidden"] != ""]
-            if len(dropped):
-                st.caption(f"{len(dropped)} candidate(s) dropped for containing a forbidden substructure.")
-
-            st.download_button("Download CSV", kept.to_csv(index=False).encode(),
-                               file_name="tamg_candidates.csv", mime="text/csv")
-
-            st.markdown("#### ➡️ What to do with these results")
-            st.markdown(
-                "These numbers **rank** candidates — they don't prove any of them binds. "
-                "Use them to pick a shortlist:\n"
-                "1. **Keep the all-rounders** — high QED, low SA, and Ro5 = True (not just one good number).\n"
-                "2. **Drop the impractical ones** — SA above ~5 (hard to make) or LogP above 5 (not drug-like).\n"
-                "3. **Refine & re-run** — add more forbidden groups, or ask the chat below for "
-                "*“smaller / simpler / more polar”* candidates, then **Generate** again.\n"
-                "4. **Interrogate your picks** in the chat — *“compare candidate 1 and 3”*, "
-                "*“how would I lower this one's LogP?”*\n"
-                "5. **Download the CSV** of your shortlist.\n\n"
-                "**Next stage (not in this app):** dock the shortlist to check real binding."
-            )
-            st.info("Scores are real RDKit computations. Docking/binding validation is not wired in — "
-                    "present this as LLM-proposed, RDKit-validated.")
-
+            st.session_state["results"] = {
+                "kept": kept,
+                "proposed": len(proposed),
+                "unique": len(df),
+                "dropped": int((df["Forbidden"] != "").sum()),
+            }
     except Exception as e:
-        st.error(explain_error(e))
+        st.session_state["results"] = {"error": explain_error(e)}
+
+# --- Render results from session_state (survives chat reruns) ---
+res = st.session_state.get("results")
+if res:
+    if "error" in res:
+        st.error(res["error"])
+    else:
+        kept = res["kept"]
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Proposed (valid)", res["proposed"])
+        c2.metric("Unique", res["unique"])
+        c3.metric("Passed forbid-filter", len(kept))
+        c4.metric("Drug-like (Ro5)", int(kept["Ro5"].sum()))
+
+        st.markdown("#### Ranked candidates (by QED)")
+        show_cols = ["SMILES", "QED", "SA", "MW", "LogP", "HBD", "HBA", "Ro5"]
+        st.dataframe(kept[show_cols], use_container_width=True, hide_index=True)
+
+        if res["dropped"]:
+            st.caption(f"{res['dropped']} candidate(s) dropped for containing a forbidden substructure.")
+
+        st.download_button("Download CSV", kept.to_csv(index=False).encode(),
+                           file_name="tamg_candidates.csv", mime="text/csv")
+
+        st.markdown("#### ➡️ What to do with these results")
+        st.markdown(
+            "These numbers **rank** candidates — they don't prove any of them binds. "
+            "Use them to pick a shortlist:\n"
+            "1. **Keep the all-rounders** — high QED, low SA, and Ro5 = True (not just one good number).\n"
+            "2. **Drop the impractical ones** — SA above ~5 (hard to make) or LogP above 5 (not drug-like).\n"
+            "3. **Refine & re-run** — add more forbidden groups, or ask the chat below for "
+            "*“smaller / simpler / more polar”* candidates, then **Generate** again.\n"
+            "4. **Interrogate your picks** in the chat — *“compare candidate 1 and 3”*, "
+            "*“how would I lower this one's LogP?”*\n"
+            "5. **Download the CSV** of your shortlist.\n\n"
+            "**Next stage (not in this app):** dock the shortlist to check real binding."
+        )
+        st.info("Scores are real RDKit computations. Docking/binding validation is not wired in — "
+                "present this as LLM-proposed, RDKit-validated.")
 
 # ---------------------------------------------------------------------------
 # Free-form chat

@@ -211,6 +211,20 @@ if st.button("Generate & validate", type="primary"):
 
             st.download_button("Download CSV", kept.to_csv(index=False).encode(),
                                file_name="tamg_candidates.csv", mime="text/csv")
+
+            st.markdown("#### ➡️ What to do with these results")
+            st.markdown(
+                "These numbers **rank** candidates — they don't prove any of them binds. "
+                "Use them to pick a shortlist:\n"
+                "1. **Keep the all-rounders** — high QED, low SA, and Ro5 = True (not just one good number).\n"
+                "2. **Drop the impractical ones** — SA above ~5 (hard to make) or LogP above 5 (not drug-like).\n"
+                "3. **Refine & re-run** — add more forbidden groups, or ask the chat below for "
+                "*“smaller / simpler / more polar”* candidates, then **Generate** again.\n"
+                "4. **Interrogate your picks** in the chat — *“compare candidate 1 and 3”*, "
+                "*“how would I lower this one's LogP?”*\n"
+                "5. **Download the CSV** of your shortlist.\n\n"
+                "**Next stage (not in this app):** dock the shortlist to check real binding."
+            )
             st.info("Scores are real RDKit computations. Docking/binding validation is not wired in — "
                     "present this as LLM-proposed, RDKit-validated.")
 
